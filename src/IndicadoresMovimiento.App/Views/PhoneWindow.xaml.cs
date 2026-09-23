@@ -20,6 +20,7 @@ public partial class PhoneWindow : Window
     {
         _controller = controller;
         InitializeComponent();
+        WindowSizing.FitToWorkArea(this);
 
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _timer.Tick += (_, _) => Refresh();

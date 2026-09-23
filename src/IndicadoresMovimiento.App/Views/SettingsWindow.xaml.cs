@@ -19,6 +19,7 @@ public partial class SettingsWindow : Window
     {
         _controller = controller;
         InitializeComponent();
+        WindowSizing.FitToWorkArea(this);
         LoadValues();
 
         _controller.SettingsChanged += OnSettingsChanged;
