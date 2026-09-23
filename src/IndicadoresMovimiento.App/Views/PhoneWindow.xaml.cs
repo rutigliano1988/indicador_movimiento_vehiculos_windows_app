@@ -149,5 +149,28 @@ public partial class PhoneWindow : Window
         }
     }
 
+    private async void OnFirewall(object sender, RoutedEventArgs e)
+    {
+        FirewallButton.IsEnabled = false;
+        FirewallResult.Text = "Esperando el permiso de administrador…";
+        try
+        {
+            var firstPort = _controller.Settings.PhonePort;
+            var allowed = await FirewallHelper.AllowPhoneConnectionsAsync(firstPort, firstPort + PhoneServer.PortAttempts - 1);
+            FirewallResult.Text = allowed
+                ? "Listo: el firewall ya deja que el móvil se conecte en cualquier red."
+                : "No se pudo cambiar el firewall. Hace falta aceptar el aviso de permisos de administrador.";
+        }
+        catch (Exception exception)
+        {
+            ErrorLog.Write(exception, "Error al configurar el firewall");
+            FirewallResult.Text = "No se pudo cambiar el firewall: " + exception.Message;
+        }
+        finally
+        {
+            FirewallButton.IsEnabled = true;
+        }
+    }
+
     private void OnClose(object sender, RoutedEventArgs e) => Close();
 }

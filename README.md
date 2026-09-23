@@ -65,8 +65,11 @@ La aplicación queda como un icono junto al reloj de Windows. Haz clic en él pa
    - de pie en un soporte con la pantalla mirando hacia ti (en vertical u horizontal), o
    - tumbado boca arriba con la parte de arriba hacia la parte delantera del coche.
 
-Si Windows pregunta por el **firewall**, pulsa «Permitir acceso». Si la red Wi-Fi está marcada como pública y no
-conecta, cámbiala a privada en *Configuración → Red e Internet → Wi-Fi → (tu red) → Tipo de perfil de red*.
+Si Windows pregunta por el **firewall**, pulsa «Permitir acceso». Ojo: Windows solo da ese permiso en el tipo de
+red donde se abrió la aplicación por primera vez (normalmente la Wi-Fi de casa, «privada»), y el punto de acceso del
+móvil suele quedar como red «pública». Si en el coche el móvil no conecta, pulsa **Permitir la conexión del móvil en
+cualquier red** en la ventana del código QR: pide permiso de administrador una vez y deja pasar al móvil en cualquier
+red (solo en los puertos de la aplicación, del 47800 al 47809).
 
 ## Consejos
 

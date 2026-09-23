@@ -83,12 +83,18 @@
                     </Border>
 
                     <Border Style="{StaticResource Card}" Margin="0,10,0,0" Background="#FFF8E1" BorderBrush="#F2D98B">
-                        <TextBlock Style="{StaticResource Help}" Foreground="#5F4B00">
-                            <Run FontWeight="SemiBold" Text="¿No conecta?" />
-                            Si Windows pregunta por el firewall, pulsa «Permitir acceso». Si la red está marcada como pública,
-                            cámbiala a privada en Configuración → Red e Internet → Wi-Fi → (tu red) → Tipo de perfil de red.
-                            En ordenadores del trabajo es posible que la empresa bloquee estas conexiones.
-                        </TextBlock>
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource Help}" Foreground="#5F4B00">
+                                <Run FontWeight="SemiBold" Text="¿No conecta?" />
+                                Si Windows pregunta por el firewall, pulsa «Permitir acceso». Aun así, Windows suele tratar el
+                                punto de acceso del móvil como red pública y puede bloquear la conexión si la aplicación se abrió
+                                antes en otra red. Este botón lo arregla (pide permiso de administrador una vez):
+                            </TextBlock>
+                            <Button x:Name="FirewallButton" Content="Permitir la conexión del móvil en _cualquier red"
+                                    Click="OnFirewall" HorizontalAlignment="Left" Margin="0,10,0,0"
+                                    Style="{StaticResource SecondaryButton}" />
+                            <TextBlock x:Name="FirewallResult" Style="{StaticResource Help}" Foreground="#5F4B00" Margin="0,6,0,0" />
+                        </StackPanel>
                     </Border>
                 </StackPanel>
             </Grid>
