@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light dark">
+<title>Sensor de movimiento</title>
+<style>
+  :root {
+    --bg: #f2f2f7; --card: #ffffff; --text: #1c1c1e; --muted: #6c6c70;
+    --accent: #0a66d8; --ok: #1f8a4c; --warn: #b35c00; --err: #c9001a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #000000; --card: #1c1c1e; --text: #f2f2f7; --muted: #a1a1a6;
+      --accent: #409cff; --ok: #32d74b; --warn: #ffb340; --err: #ff6961;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 17px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+  }
+  main { max-width: 520px; margin: 0 auto; }
+  h1 { font-size: 26px; line-height: 1.2; margin: 8px 0 6px; }
+  h2 { font-size: 18px; margin: 0 0 8px; }
+  .lead, .muted { color: var(--muted); }
+  .lead { margin: 0 0 12px; }
+  .card { background: var(--card); border-radius: 14px; padding: 16px; margin: 12px 0; }
+  button {
+    appearance: none; border: 0; border-radius: 12px; padding: 15px 18px; width: 100%;
+    font: inherit; font-weight: 600; background: var(--accent); color: #fff; cursor: pointer;
+  }
+  button.secondary { background: transparent; color: var(--accent); box-shadow: inset 0 0 0 1.5px var(--accent); margin-top: 12px; }
+  .status { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+  .light { width: 14px; height: 14px; border-radius: 50%; background: var(--muted); flex: none; }
+  .light.ok { background: var(--ok); }
+  .light.warn { background: var(--warn); }
+  .light.err { background: var(--err); }
+  .error { color: var(--err); font-weight: 600; }
+  ul { padding-left: 20px; margin: 0; }
+  li { margin: 6px 0; }
+  p { margin: 8px 0 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Indicadores de movimiento</h1>
+  <p class="lead">Este móvil enviará sus sensores de movimiento a tu ordenador para que los puntos de la pantalla se muevan con el coche.</p>
+
+  <section class="card" id="inicio">
+    <button id="empezar" type="button">Empezar</button>
+    <p class="muted">Si el móvil pide permiso para acceder al movimiento y la orientación, pulsa «Permitir».</p>
+  </section>
+
+  <section class="card" id="panel" hidden>
+    <div class="status"><span class="light" id="luz"></span><span id="estado">Conectando…</span></div>
+    <p class="muted" id="detalle"></p>
+    <p id="posicion"></p>
+    <button id="parar" class="secondary" type="button">Parar</button>
+  </section>
+
+  <section class="card error" id="error" hidden></section>
+
+  <section class="card">
+    <h2>Cómo colocar el móvil</h2>
+    <ul>
+      <li>Fíjalo en un soporte o apóyalo en algún sitio donde no se mueva.</li>
+      <li><strong>De pie</strong>, con la pantalla mirando hacia ti (en vertical o en horizontal), o <strong>tumbado</strong> boca arriba con la parte de arriba hacia la parte delantera del coche.</li>
+      <li>Deja esta página abierta y la pantalla encendida. Mejor si el móvil está cargando.</li>
+    </ul>
+  </section>
+  <noscript><p class="card error">Hace falta activar JavaScript.</p></noscript>
+</main>
+<script>
+(() => {
+  'use strict';
+
+  const $ = (id) => document.getElementById(id);
+  const token = new URLSearchParams(location.search).get('k') || '';
+  const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const SEND_INTERVAL_MS = 40;
+  const MAX_QUEUE = 150;
+
+  let running = false;
+  let queue = [];
+  let inFlight = false;
+  let wakeLock = null;
+  let sendTimer = 0;
+  let uiTimer = 0;
+
+  // Orientación del móvil (beta/gamma, en grados) para averiguar el signo de la gravedad.
+  let orientation = null;
+  // Votos: positivos = el navegador da la gravedad "hacia arriba" (Android); negativos = "hacia abajo" (iPhone).
+  let signVotes = 0;
+  // Para comprobar que "acceleration" usa el mismo signo que "accelerationIncludingGravity".
+  let lowPass = null;
+  let accCorrelation = 0;
+  let accRelativeSign = 1;
+
+  let lastUp = null;
+  let motionEvents = 0;
+  let sentSamples = 0;
+  let sentAtLastUi = 0;
+  let lastUiTime = 0;
+  let lastOk = 0;
+  let lastError = '';
+
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const len = (a) => Math.hypot(a[0], a[1], a[2]);
+  const round = (v) => Math.round(v * 10000) / 10000;
+  const now = () => performance.now() / 1000;
+
+  function screenAngle() {
+    let a = 0;
+    if (typeof window.orientation === 'number') a = window.orientation;
+    else if (screen.orientation && typeof screen.orientation.angle === 'number') a = screen.orientation.angle;
+    return ((a % 360) + 360) % 360;
+  }
+
+  // Dirección "abajo" en los ejes del móvil según beta y gamma (especificación DeviceOrientation).
+  function downFromOrientation(beta, gamma) {
+    const b = beta * Math.PI / 180;
+    const g = gamma * Math.PI / 180;
+    return [Math.cos(b) * Math.sin(g), -Math.sin(b), -Math.cos(b) * Math.cos(g)];
+  }
+
+  function gravitySign() {
+    if (signVotes >= 5) return 1;
+    if (signVotes <= -5) return -1;
+    return isIOS ? -1 : 1; // lo habitual en cada plataforma mientras no hay datos suficientes
+  }
+
+  function onOrientation(e) {
+    if (e.beta == null || e.gamma == null) return;
+    orientation = { beta: e.beta, gamma: e.gamma };
+  }
+
+  function onMotion(e) {
+    const g = e.accelerationIncludingGravity;
+    if (!running || !g || g.x == null || g.y == null || g.z == null) return;
+    const t = now();
+    const w = [g.x, g.y, g.z];
+    const n = len(w);
+    motionEvents++;
+
+    if (orientation && n > 6 && n < 14) {
+      const c = dot(w, downFromOrientation(orientation.beta, orientation.gamma)) / n;
+      if (c > 0.8) signVotes = Math.max(-50, signVotes - 1);
+      else if (c < -0.8) signVotes = Math.min(50, signVotes + 1);
+    }
+    const s = gravitySign();
+
+    let linear = null;
+    const a = e.acceleration;
+    if (a && a.x != null && a.y != null && a.z != null) {
+      const av = [a.x, a.y, a.z];
+      if (!lowPass) lowPass = w.slice();
+      for (let i = 0; i < 3; i++) lowPass[i] += (w[i] - lowPass[i]) * 0.1;
+      const highPass = [w[0] - lowPass[0], w[1] - lowPass[1], w[2] - lowPass[2]];
+      accCorrelation = accCorrelation * 0.995 + dot(highPass, av);
+      if (accCorrelation < -2) accRelativeSign = -1;
+      else if (accCorrelation > 2) accRelativeSign = 1;
+      const k = s * accRelativeSign;
+      linear = [k * av[0], k * av[1], k * av[2]];
+    }
+
+    const f = [s * w[0], s * w[1], s * w[2]];
+    lastUp = linear ? [f[0] - linear[0], f[1] - linear[1], f[2] - linear[2]] : f;
+    const row = linear ? [t, f[0], f[1], f[2], linear[0], linear[1], linear[2]] : [t, f[0], f[1], f[2]];
+    queue.push(row.map(round));
+    if (queue.length > MAX_QUEUE) queue.splice(0, queue.length - MAX_QUEUE);
+  }
+
+  async function flush() {
+    if (!running || inFlight || queue.length === 0) return;
+    const batch = queue;
+    queue = [];
+    inFlight = true;
+    try {
+      const response = await fetch('/m', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Token': token },
+        body: JSON.stringify({ ang: screenAngle(), s: batch }),
+        cache: 'no-store',
+      });
+      if (response.status === 401) {
+        lastError = 'token';
+      } else if (!response.ok) {
+        lastError = 'http';
+      } else {
+        lastError = '';
+        lastOk = now();
+        sentSamples += batch.length;
+      }
+    } catch (_) {
+      // Sin conexión: esas lecturas ya no sirven, se envían las siguientes.
+      lastError = 'red';
+    } finally {
+      inFlight = false;
+    }
+  }
+
+  function setStatus(kind, text, detail) {
+    $('luz').className = 'light ' + kind;
+    $('estado').textContent = text;
+    $('detalle').textContent = detail || '';
+  }
+
+  function describePosition() {
+    if (!lastUp) return '';
+    const n = len(lastUp);
+    if (n < 5) return '';
+    const z = lastUp[2] / n;
+    if (z > 0.8) return 'Móvil tumbado boca arriba: que la parte de arriba apunte hacia delante.';
+    if (z < -0.8) return 'El móvil está boca abajo: dale la vuelta.';
+    if (Math.abs(z) < 0.6) return 'Móvil de pie: que la pantalla mire hacia ti.';
+    return 'Móvil inclinado: funciona mejor de pie o tumbado.';
+  }
+
+  function updateUi() {
+    const t = now();
+    const elapsed = lastUiTime ? t - lastUiTime : 0;
+    const rate = elapsed > 0 ? (sentSamples - sentAtLastUi) / elapsed : 0;
+    sentAtLastUi = sentSamples;
+    lastUiTime = t;
+
+    if (lastError === 'token') {
+      setStatus('err', 'Código no válido', 'Vuelve a escanear el código QR que muestra el ordenador.');
+    } else if (motionEvents === 0) {
+      setStatus('warn', 'Esperando al sensor…', 'Si no cambia en unos segundos, recarga la página.');
+    } else if (lastError === 'red') {
+      setStatus('err', 'Sin conexión con el ordenador', '¿Siguen los dos en la misma red Wi-Fi y la aplicación abierta en el ordenador?');
+    } else if (t - lastOk < 1.5) {
+      setStatus('ok', 'Enviando al ordenador', Math.round(rate) + ' lecturas por segundo');
+    } else {
+      setStatus('warn', 'Conectando…', '');
+    }
+    $('posicion').textContent = describePosition();
+  }
+
+  async function requestWakeLock() {
+    try {
+      if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
+    } catch (_) {
+      wakeLock = null;
+    }
+  }
+
+  function showError(text) {
+    const box = $('error');
+    box.textContent = text;
+    box.hidden = !text;
+  }
+
+  async function start() {
+    showError('');
+    if (!window.isSecureContext) {
+      showError('Abre la dirección que empieza por https:// (la del código QR).');
+      return;
+    }
+    if (!token) {
+      showError('Falta el código de conexión. Escanea el código QR que muestra el ordenador.');
+      return;
+    }
+    if (typeof DeviceMotionEvent === 'undefined') {
+      showError('Este navegador no da acceso a los sensores de movimiento. Prueba con Safari o Chrome.');
+      return;
+    }
+
+    try {
+      if (typeof DeviceMotionEvent.requestPermission === 'function') {
+        // Hay que pedir ambos permisos dentro del mismo toque del usuario.
+        const motion = DeviceMotionEvent.requestPermission();
+        const orient = (typeof DeviceOrientationEvent !== 'undefined' &&
+          typeof DeviceOrientationEvent.requestPermission === 'function')
+          ? DeviceOrientationEvent.requestPermission().catch(() => 'denied')
+          : Promise.resolve('granted');
+        const result = await motion;
+        await orient;
+        if (result !== 'granted') {
+          showError('No hay permiso para leer el movimiento. Cierra esta pestaña, vuelve a abrir el enlace y pulsa «Permitir».');
+          return;
+        }
+      }
+    } catch (err) {
+      showError('No se pudo pedir el permiso de movimiento (' + (err && err.message ? err.message : err) + ').');
+      return;
+    }
+
+    running = true;
+    window.addEventListener('devicemotion', onMotion);
+    window.addEventListener('deviceorientation', onOrientation);
+    sendTimer = setInterval(flush, SEND_INTERVAL_MS);
+    uiTimer = setInterval(updateUi, 500);
+    $('inicio').hidden = true;
+    $('panel').hidden = false;
+    updateUi();
+    await requestWakeLock();
+
+    setTimeout(() => {
+      if (running && motionEvents === 0) {
+        showError('No llegan datos del sensor de movimiento. Este navegador o dispositivo puede que no lo permita.');
+      }
+    }, 3000);
+  }
+
+  function stop() {
+    running = false;
+    window.removeEventListener('devicemotion', onMotion);
+    window.removeEventListener('deviceorientation', onOrientation);
+    clearInterval(sendTimer);
+    clearInterval(uiTimer);
+    queue = [];
+    if (wakeLock) {
+      wakeLock.release().catch(() => {});
+      wakeLock = null;
+    }
+    $('panel').hidden = true;
+    $('inicio').hidden = false;
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && running) requestWakeLock();
+  });
+  $('empezar').addEventListener('click', start);
+  $('parar').addEventListener('click', stop);
+})();
+</script>
+</body>
+</html>

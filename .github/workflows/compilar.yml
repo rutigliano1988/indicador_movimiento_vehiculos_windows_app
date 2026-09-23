@@ -1,0 +1,58 @@
+name: Compilar
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write # para publicar la versión cuando se sube una etiqueta v*
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Pruebas
+        run: dotnet test tests/IndicadoresMovimiento.Tests -c Release
+
+      - name: Compilar la aplicación
+        run: dotnet build src/IndicadoresMovimiento.App -c Release
+
+      - name: Crear los ejecutables (x64 y ARM64)
+        shell: pwsh
+        run: |
+          foreach ($rid in @("win-x64", "win-arm64")) {
+            dotnet publish src/IndicadoresMovimiento.App -c Release -r $rid --self-contained `
+              -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
+              -p:EnableCompressionInSingleFile=true -p:DebugType=none -o "publish/$rid"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          New-Item -ItemType Directory -Force salida | Out-Null
+          Copy-Item publish/win-x64/IndicadoresMovimiento.exe salida/IndicadoresMovimiento-x64.exe
+          Copy-Item publish/win-arm64/IndicadoresMovimiento.exe salida/IndicadoresMovimiento-arm64.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: IndicadoresMovimiento-x64
+          path: salida/IndicadoresMovimiento-x64.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: IndicadoresMovimiento-arm64
+          path: salida/IndicadoresMovimiento-arm64.exe
+
+      - name: Publicar la versión
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            salida/IndicadoresMovimiento-x64.exe
+            salida/IndicadoresMovimiento-arm64.exe
