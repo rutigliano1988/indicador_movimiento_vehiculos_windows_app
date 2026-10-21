@@ -36,13 +36,16 @@ Con la opción **Automática** (la predeterminada) se usa el sensor del ordenado
 
 ## Descargar y abrir
 
-1. En este repositorio, entra en **Actions** → la ejecución más reciente de **Compilar** que esté en verde →
-   sección **Artifacts** y descarga:
-   - **IndicadoresMovimiento-x64** para la mayoría de ordenadores (Intel o AMD).
-   - **IndicadoresMovimiento-arm64** para ordenadores con procesador ARM (por ejemplo, Snapdragon).
+1. Descarga el ejecutable de la [última versión publicada](https://github.com/rutigliano1988/indicador_movimiento_vehiculos_windows_app/releases/latest)
+   (no hace falta cuenta de GitHub):
+   - [**IndicadoresMovimiento-x64.exe**](https://github.com/rutigliano1988/indicador_movimiento_vehiculos_windows_app/releases/latest/download/IndicadoresMovimiento-x64.exe)
+     para la mayoría de ordenadores (Intel o AMD).
+   - [**IndicadoresMovimiento-arm64.exe**](https://github.com/rutigliano1988/indicador_movimiento_vehiculos_windows_app/releases/latest/download/IndicadoresMovimiento-arm64.exe)
+     para ordenadores con procesador ARM (por ejemplo, Snapdragon).
 
-   Si hay versiones publicadas, también están en **Releases**.
-2. Descomprime el archivo y guarda el `.exe` en una carpeta fija (por ejemplo, *Documentos*).
+   Las compilaciones más recientes, aún sin publicar, están en **Actions** → **Compilar** → **Artifacts**
+   (hay que iniciar sesión en GitHub y descomprimir el `.zip`).
+2. Guarda el `.exe` en una carpeta fija (por ejemplo, *Documentos*).
 3. Ábrelo. No necesita instalación ni permisos de administrador.
    Si aparece **«Windows protegió su PC»**, pulsa **Más información → Ejecutar de todas formas**
    (sale porque el ejecutable no está firmado digitalmente).
