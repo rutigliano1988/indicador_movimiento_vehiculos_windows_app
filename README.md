@@ -126,6 +126,12 @@ dotnet publish src/IndicadoresMovimiento.App -c Release -r win-x64 --self-contai
   -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true
 ```
 
+### Publicar una versión
+
+En **Actions → Compilar → Run workflow**, escribe la versión (por ejemplo `0.2.0`) y pulsa **Run workflow**.
+Se ejecutan las pruebas, se crean los ejecutables con ese número de versión y se publica la versión en
+**Releases** con las notas de `docs/notas-de-version.md`. También se publica al subir una etiqueta `v0.2.0`.
+
 ### Cómo se calcula
 
 1. Las lecturas se pasan a una convención común: fuerza específica en m/s² que, en reposo, apunta hacia arriba.

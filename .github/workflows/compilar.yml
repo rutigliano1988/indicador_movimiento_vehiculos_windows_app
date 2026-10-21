@@ -6,9 +6,14 @@ on:
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Versión a publicar en Releases (por ejemplo 0.1.0). Déjalo vacío para solo compilar."
+        required: false
+        default: ""
 
 permissions:
-  contents: write # para publicar la versión cuando se sube una etiqueta v*
+  contents: write # para publicar la versión (etiqueta v* o «Run workflow» con una versión)
 
 jobs:
   windows:
@@ -26,13 +31,31 @@ jobs:
       - name: Compilar la aplicación
         run: dotnet build src/IndicadoresMovimiento.App -c Release
 
+      - name: Versión a publicar
+        id: version
+        shell: pwsh
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          $version = "$env:INPUT_VERSION".Trim().TrimStart("v")
+          if (-not $version -and "$env:GITHUB_REF".StartsWith("refs/tags/v")) { $version = "$env:GITHUB_REF_NAME".Substring(1) }
+          if ($version -and $version -notmatch '^\d+\.\d+\.\d+$') {
+            Write-Error "La versión debe tener el formato 1.2.3 (se recibió '$version')."
+            exit 1
+          }
+          "value=$version" >> $env:GITHUB_OUTPUT
+
       - name: Crear los ejecutables (x64 y ARM64)
         shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
         run: |
+          $versionArgs = @()
+          if ($env:VERSION) { $versionArgs = @("-p:Version=$env:VERSION") }
           foreach ($rid in @("win-x64", "win-arm64")) {
             dotnet publish src/IndicadoresMovimiento.App -c Release -r $rid --self-contained `
               -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
-              -p:EnableCompressionInSingleFile=true -p:DebugType=none -o "publish/$rid"
+              -p:EnableCompressionInSingleFile=true -p:DebugType=none @versionArgs -o "publish/$rid"
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
           New-Item -ItemType Directory -Force salida | Out-Null
@@ -50,9 +73,13 @@ jobs:
           path: salida/IndicadoresMovimiento-arm64.exe
 
       - name: Publicar la versión
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: steps.version.outputs.value != ''
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ steps.version.outputs.value }}
+          target_commitish: ${{ github.sha }}
+          name: Indicadores de movimiento ${{ steps.version.outputs.value }}
+          body_path: docs/notas-de-version.md
           files: |
             salida/IndicadoresMovimiento-x64.exe
             salida/IndicadoresMovimiento-arm64.exe
